@@ -1,0 +1,49 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Add a Coverlight room",
+        "description": "Pick the speaker to follow and the color lights that should take on its album art. Lights are colored in the order you list them, so neighbouring lights get neighbouring palette colors.",
+        "data": {
+          "name": "Room name",
+          "media_player": "Speaker",
+          "lights": "Lights",
+          "restore_lights": "Restore lights when sync turns off"
+        },
+        "data_description": {
+          "name": "Optional. Defaults to the speaker's name."
+        }
+      }
+    },
+    "error": {
+      "no_lights": "Pick at least one light."
+    },
+    "abort": {
+      "already_configured": "That speaker already has a Coverlight room."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Room settings",
+        "data": {
+          "media_player": "Speaker",
+          "lights": "Lights",
+          "restore_lights": "Restore lights when sync turns off"
+        }
+      }
+    },
+    "error": {
+      "no_lights": "Pick at least one light."
+    }
+  },
+  "entity": {
+    "switch": {
+      "sync": { "name": "Sync" }
+    },
+    "number": {
+      "brightness": { "name": "Brightness" },
+      "motion": { "name": "Motion" }
+    }
+  }
+}

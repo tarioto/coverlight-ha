@@ -1,0 +1,21 @@
+{
+  "domain": "coverlight",
+  "name": "Coverlight",
+  "after_dependencies": [
+    "scene"
+  ],
+  "codeowners": [
+    "@tarioto"
+  ],
+  "config_flow": true,
+  "dependencies": [
+    "light",
+    "media_player"
+  ],
+  "documentation": "https://github.com/tarioto/coverlight-ha",
+  "integration_type": "service",
+  "iot_class": "calculated",
+  "issue_tracker": "https://github.com/tarioto/coverlight-ha/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}
