@@ -21,9 +21,10 @@ from .const import (
     DRIFT_PERIOD,
     MIN_STEP,
     STEP_PER_LIGHT,
+    TRACK_STAGGER,
     TRACK_TRANSITION,
 )
-from .palette import HS, WARM_WHITE, drift_color, extract_palette
+from .palette import WARM_WHITE, Swatch, assign_lights, extract_palette, light_target
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -48,7 +49,8 @@ class RoomSync:
         self.enabled = False
         self.brightness = DEFAULT_BRIGHTNESS
         self.motion = DEFAULT_MOTION
-        self.palette: list[HS] = [WARM_WHITE]
+        self.palette: list[Swatch] = [WARM_WHITE]
+        self._slots = assign_lights(self.palette, len(lights))
 
         self._artwork: str | None = None
         self._unsub_state: Callable[[], None] | None = None
@@ -126,14 +128,16 @@ class RoomSync:
         if data is None:
             # Nothing playing (yet): keep the current colors, but light the room when starting.
             if turn_on and self.enabled:
-                await self._push_all(transition=TRACK_TRANSITION, turn_on=True)
+                await self._push_all(transition=TRACK_TRANSITION, turn_on=True, stagger=TRACK_STAGGER)
             return
         palette = await self.hass.async_add_executor_job(extract_palette, data)
         if not self.enabled:
             return
         self.palette = palette
-        _LOGGER.debug("%s palette: %s", self.media_player, palette)
-        await self._push_all(transition=TRACK_TRANSITION, turn_on=turn_on)
+        self._slots = assign_lights(palette, len(self.lights))
+        _LOGGER.debug("%s palette: %s, lights: %s", self.media_player, palette, self._slots)
+        # Stagger the crossfade so the new palette sweeps through the room in light order.
+        await self._push_all(transition=TRACK_TRANSITION, turn_on=turn_on, stagger=TRACK_STAGGER)
 
     async def _fetch_artwork(self) -> bytes | None:
         # Ask the media player entity directly: no URL, auth token or network round trip.
@@ -172,7 +176,8 @@ class RoomSync:
         while True:
             for rank, light in enumerate(self.lights):
                 await asyncio.sleep(gap)
-                if self.motion > 0 and len(self.palette) > 1 and self._is_playing():
+                # Even a one-color palette moves: brightness breathes with motion.
+                if self.motion > 0 and self._is_playing():
                     # Aim at where the drift will be when this transition ends.
                     await self._send(light, rank, transition=step, at=time.time() + step)
 
@@ -180,8 +185,10 @@ class RoomSync:
         state = self.hass.states.get(self.media_player)
         return state is not None and state.state == STATE_PLAYING
 
-    async def _push_all(self, transition: float, turn_on: bool = False) -> None:
+    async def _push_all(self, transition: float, turn_on: bool = False, stagger: float = 0.0) -> None:
         for rank, light in enumerate(self.lights):
+            if rank and stagger:
+                await asyncio.sleep(stagger)
             await self._send(
                 light, rank, transition=transition, at=time.time() + transition, turn_on=turn_on
             )
@@ -194,14 +201,16 @@ class RoomSync:
         state = self.hass.states.get(light)
         if not turn_on and state is not None and state.state == STATE_OFF:
             return
-        hue, saturation = drift_color(self.palette, rank, at, self.motion / 100, DRIFT_PERIOD)
+        target = light_target(
+            self.palette, self._slots[rank], rank, at, self.motion / 100, DRIFT_PERIOD
+        )
         await self.hass.services.async_call(
             LIGHT_DOMAIN,
             "turn_on",
             {
                 "entity_id": light,
-                "hs_color": [round(hue * 360, 1), round(saturation * 100, 1)],
-                "brightness_pct": round(self.brightness),
+                "hs_color": [round(target.hue * 360, 1), round(target.saturation * 100, 1)],
+                "brightness_pct": max(1, round(self.brightness * target.brightness)),
                 "transition": transition,
             },
             blocking=False,

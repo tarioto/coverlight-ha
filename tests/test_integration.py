@@ -1,5 +1,6 @@
 import asyncio
 import io
+import time
 from unittest.mock import patch
 
 from PIL import Image
@@ -7,7 +8,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.common import async_mock_service
 
-from custom_components.coverlight.const import DOMAIN
+from custom_components.coverlight.const import DOMAIN, TRACK_STAGGER
 
 SPEAKER = "media_player.office"
 LIGHTS = ["light.left", "light.right"]
@@ -64,13 +65,18 @@ async def test_room_follows_artwork(hass: HomeAssistant):
         assert scene_create[0].data["snapshot_entities"] == LIGHTS
         assert {c.data["entity_id"] for c in turn_on} == set(LIGHTS)
         assert all(_hue(c) < 10 or _hue(c) > 350 for c in turn_on)  # red
-        assert all(c.data["brightness_pct"] == 80 for c in turn_on)
+        # 50 % motion breathes at most 7.5 % below the slider.
+        assert all(74 <= c.data["brightness_pct"] <= 80 for c in turn_on)
 
         # New track → crossfade to the new cover's palette.
         turn_on.clear()
+        sent_at = []
+        unsub = hass.bus.async_listen("call_service", lambda _: sent_at.append(time.monotonic()))
         hass.states.async_set(SPEAKER, "playing", {"entity_picture": "/art/green", "friendly_name": "Office"})
         await hass.async_block_till_done()
+        unsub()
         assert len(turn_on) == 2
+        assert sent_at[-1] - sent_at[0] >= TRACK_STAGGER * 0.9  # lights sweep, not all at once
         assert all(110 < _hue(c) < 140 for c in turn_on)
         assert all(c.data["transition"] == 2.0 for c in turn_on)
 
@@ -80,7 +86,8 @@ async def test_room_follows_artwork(hass: HomeAssistant):
             "number", "set_value",
             {"entity_id": "number.coverlight_office_brightness", "value": 40}, blocking=True,
         )
-        assert [c.data["brightness_pct"] for c in turn_on] == [40, 40]
+        assert len(turn_on) == 2
+        assert all(37 <= c.data["brightness_pct"] <= 40 for c in turn_on)
 
         # Off → restore the snapshot.
         hass.states.async_set(f"scene.coverlight_{entry.entry_id.lower()}", "scening")
