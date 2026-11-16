@@ -17,3 +17,5 @@ MIN_STEP = 3.0  # seconds
 STEP_PER_LIGHT = 0.4  # seconds; keeps big rooms under the Hue bridge's ~10 commands/s
 # Crossfade when the track (and so the palette) changes.
 TRACK_TRANSITION = 2.0  # seconds
+# Gap between lights starting that crossfade, so a new palette sweeps through the room.
+TRACK_STAGGER = 0.2  # seconds
